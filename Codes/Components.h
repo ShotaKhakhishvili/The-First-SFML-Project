@@ -58,10 +58,10 @@ public:
 class CLifespan
 {
 public:
-	int remaining	= 0;	// Remaining frames to live
-	int total		= 0;	// Total frames to live
+	float remaining	= 0;	// Remaining frames to live
+	float total		= 0;	// Total frames to live
 
-	CLifespan(int intotal)
+	CLifespan(float intotal)
 		: remaining(intotal), total(intotal)
 	{}
 };

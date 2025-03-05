@@ -13,6 +13,6 @@ void* operator new(std::size_t size) {
 
 void operator delete(void* ptr, std::size_t size) noexcept {
     totalAllocated -= size;
-    std::cout << "Deallocating " << size << " bytes, total allocated: " << totalAllocated << "\n";
+    //std::cout << "Deallocating " << size << " bytes, total allocated: " << totalAllocated << "\n";
     std::free(ptr);
 }

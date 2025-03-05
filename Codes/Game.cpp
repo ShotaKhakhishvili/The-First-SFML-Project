@@ -1,13 +1,13 @@
 #include "Game.h"
 
-Game::Game(const std::string& config)
+Game::Game(const std::string& configs)
 {
-	init(config);
+	init(configs);
 }
 
-void Game::init(const std::string& path)
+void Game::init(const std::string& configs)
 {
-	std::ifstream fin(path);
+	std::ifstream fin(configs);
 
 	std::string configType;
 
@@ -18,25 +18,29 @@ void Game::init(const std::string& path)
 
 	spawnPlayer();
 
-	if (!m_font.loadFromFile("D:\\Fonts\\ToThePointRegular-n9y4.ttf"))
+	if (!m_font.loadFromFile(m_fontPath))
 	{
 		exit(-1);
 	}
 
 	m_text = sf::Text("Score: 0", m_font, m_textSize);
+	m_text.setPosition(sf::Vector2f(20,10));
+
+	m_textFPS = sf::Text("FPS: balls", m_font, m_textSize);
+	m_textFPS.setPosition(sf::Vector2f(20, m_window.getSize().y - m_textSize - 20));
 }
 
 void Game::readConfigs(std::string& configType, std::ifstream& fin)
 {
-	if (configType == "Window") // 3 parameters
+	if (configType == "Window") 
 	{
 		unsigned int width, height, maxFPS;
-		fin >> width >> height >> maxFPS;
+		fin >> width >> height >> maxFPS >> m_FPSDisplayDelay >> m_fontPath;
 
 		m_window.create({ width, height }, "CPP Game");
 		m_window.setFramerateLimit(maxFPS);
 	}
-	else if (configType == "Player") // 11 parameters
+	else if (configType == "Player") 
 	{
 		fin >> m_playerConfig.shapeRadius >> m_playerConfig.collisionRadius;
 		fin >> m_playerConfig.outlineR >> m_playerConfig.outlineG >> m_playerConfig.outlineB;
@@ -44,22 +48,22 @@ void Game::readConfigs(std::string& configType, std::ifstream& fin)
 		fin >> m_playerConfig.vertices >> m_playerConfig.outlineThickness >> m_playerConfig.speed;
 
 	}
-	else if (configType == "Enemy") // 12 parameters
+	else if (configType == "Enemy") 
 	{
 		fin >> m_enemyConfig.shapeRadius >> m_enemyConfig.collisionRadius;
 		fin >> m_enemyConfig.outlineR >> m_enemyConfig.outlineG >> m_enemyConfig.outlineB;
 		fin >> m_enemyConfig.lifespan >> m_enemyConfig.speedMin >> m_enemyConfig.speedMax;
-		fin >> m_enemyConfig.outlineThickness >> m_enemyConfig.spawnFrameDelay;
+		fin >> m_enemyConfig.outlineThickness >> m_enemyConfig.spawnDelay;
 		fin >> m_enemyConfig.verticesMin >> m_enemyConfig.verticesMax;
 
 	}
-	else if (configType == "Bullet") // 10 parameters
+	else if (configType == "Bullet")
 	{
 		fin >> m_bulletConfig.shapeRadius >> m_bulletConfig.collisionRadius;
 		fin >> m_bulletConfig.outlineR >> m_bulletConfig.outlineG >> m_bulletConfig.outlineB;
 		fin >> m_bulletConfig.fillR >> m_bulletConfig.fillG >> m_bulletConfig.fillB;
 		fin >> m_bulletConfig.lifespan >> m_bulletConfig.speed >> m_bulletConfig.outlineThickness;
-		fin >> m_bulletConfig.spawnFrameDelay;
+		fin >> m_bulletConfig.spawnDelay;
 
 	}
 }
@@ -107,19 +111,25 @@ void Game::sMovement()
 	sf::Vector2u rangeX = sf::Vector2u(m_playerConfig.collisionRadius, windowSize.x - m_playerConfig.collisionRadius);
 	sf::Vector2u rangeY = sf::Vector2u(m_playerConfig.collisionRadius, windowSize.y - m_playerConfig.collisionRadius);
 
-	m_player->cTransform->pos = Vec2(Extra::clampInt(m_player->cTransform->pos.x + m_player->cTransform->velocity.x, rangeX.x, rangeX.y),
-		Extra::clampInt(m_player->cTransform->pos.y + m_player->cTransform->velocity.y, rangeY.x, rangeY.y));
+	m_player->cTransform->pos = Vec2(Extra::clampInt(m_player->cTransform->pos.x + m_player->cTransform->velocity.x * m_dt, rangeX.x, rangeX.y),
+		Extra::clampInt(m_player->cTransform->pos.y + m_player->cTransform->velocity.y * m_dt, rangeY.x, rangeY.y));
 
 	for (auto entity : entities)
 	{
-		entity->cTransform->angle += 5;
+		entity->cTransform->angle += 360 * m_dt;
+		entity->cShape->shape.setRotation(entity->cTransform->angle);
+
 		double radians = entity->cTransform->angle * (M_PI / 180.0);
-		entity->cTransform->pos += entity->cTransform->velocity;
+
+		if (entity->tag() != "Player")
+		{
+			entity->cTransform->pos += entity->cTransform->velocity * m_dt;
+		}
+
 		sf::Vector2i pixelPos = sf::Vector2i(static_cast<float>(Extra::clampInt(entity->cTransform->pos.x, m_enemyConfig.collisionRadius, windowSize.x - m_enemyConfig.collisionRadius)),
 											static_cast<float>(Extra::clampInt(entity->cTransform->pos.y, m_enemyConfig.collisionRadius, windowSize.y - m_enemyConfig.collisionRadius)));
 		sf::Vector2f worldPos = m_window.mapPixelToCoords(pixelPos);
 		entity->cShape->shape.setPosition(worldPos);
-		entity->cShape->shape.setRotation(entity->cTransform->angle);
 	}
 }
 
@@ -192,9 +202,9 @@ void Game::sLifeSpan()
 	{
 		if (entity->cLifespan == nullptr)continue;
 
-		entity->cLifespan->remaining -= 1;
+		entity->cLifespan->remaining -= m_dt;
 
-		if (entity->cLifespan->remaining == 0) destroyEntity(entity);
+		if (entity->cLifespan->remaining <= 0) destroyEntity(entity);
 
 		entity->cShape->shape.setFillColor(sf::Color(entity->cShape->shape.getFillColor().r, entity->cShape->shape.getFillColor().g, entity->cShape->shape.getFillColor().b,
 											Extra::lerp(0, 255, static_cast<float>(entity->cLifespan->remaining) / entity->cLifespan->total)));
@@ -255,13 +265,24 @@ void Game::sRender()
 	}
 
 	m_window.draw(m_text);
+	m_window.draw(m_textFPS);
 	m_currentFrame++;
 }
 
-void Game::sScore()
+void Game::sText()
 {
+	int fps = 1.f / m_dt;
+
 	std::string text = "score: " + std::to_string(m_score);
-	m_text = sf::Text(text, m_font, m_textSize);
+	m_text.setString(text);
+
+	m_sinceLastFPSDisplayTime += m_dt;
+	if (m_sinceLastFPSDisplayTime > m_FPSDisplayDelay)
+	{
+		m_sinceLastFPSDisplayTime = 0;
+		std::string timeNow = "FPS: " + std::to_string(fps);
+		m_textFPS.setString(timeNow);
+	}
 }
 
 void Game::sWeapon()
@@ -288,8 +309,9 @@ void Game::spawnPlayer()
 
 void Game::spawnEnemy()
 {
-	if (m_currentFrame - m_lastEnemySpawnTime < m_enemyConfig.spawnFrameDelay) return;
-	m_lastEnemySpawnTime = m_currentFrame;
+	m_sinceLastEnemySpawnTime += m_dt;
+	if (m_sinceLastEnemySpawnTime < m_enemyConfig.spawnDelay) return;
+	m_sinceLastEnemySpawnTime = 0;
 
 	Entity* newEnemy = &m_entityManager.toAdd("Enemy");
 
@@ -338,13 +360,16 @@ Entity* Game::spawnSmallEnemy(Entity* enemy)
 
 void Game::spawnBullet(Vec2& mousePos)
 {
-	if (m_currentFrame - m_lastBulletSpawnTime < m_bulletConfig.spawnFrameDelay) return;
-	m_lastBulletSpawnTime = m_currentFrame;
+	m_sinceLastBulletSpawnTime += m_dt;
+	if (m_sinceLastBulletSpawnTime < m_bulletConfig.spawnDelay) return;
+	m_sinceLastBulletSpawnTime = 0;
 
 	Entity* bullet = &m_entityManager.toAdd("Bullet");
 
 	Vec2 direction = (mousePos - m_player->cTransform->pos).normalize();
 	Vec2 velocity = direction * m_bulletConfig.speed;
+
+	bullet->cLifespan = new CLifespan(m_bulletConfig.lifespan);
 
 	bullet->cTransform = new CTransform(m_player->cTransform->pos + direction * 10, velocity, 0);
 
@@ -384,6 +409,8 @@ void Game::run()
 {
 	while (true)
 	{
+		m_dt = m_clock.restart().asSeconds();
+
 		m_window.clear();
 
 		m_entityManager.update();
@@ -393,7 +420,7 @@ void Game::run()
 		sCollision();
 		sMovement();
 		sWeapon();
-		sScore();
+		sText();
 		sLifeSpan();
 		sRender();
 
